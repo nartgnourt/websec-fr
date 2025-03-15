@@ -287,3 +287,69 @@ Thêm payload vừa tạo vào cookie `leet_hax0r`, chúng ta lụm được fla
 ### Flag
 
 `WEBSEC{9abd8e8247cbe62641ff662e8fbb662769c08500}`
+
+## Level 05
+
+> The magical Shellpecker!
+>
+> 🔥 <https://websec.fr/level05/>
+
+![image](images/level-05/image-1.png)
+
+Truy cập vào source code, chúng ta tập trung vào đoạn code bên dưới. Chúng ta được nhập vào chuỗi và server lấy tối đa 256 ký tự thông qua tham số `q`. Server sử dụng hàm `preg_replace()` để thực hiện thay thế chuỗi của chúng ta nếu có kết quả khớp.
+
+Tuy nhiên, điểm đáng chú ý là pattern `/([^$blacklist]{2,})/ie` được sử dụng với modifier `e`, cho phép thực thi hàm `correct ("\\1")`. Trong đó, đối số hàm nhận là `\1` - nhóm kết quả khớp với pattern đầu tiên.
+
+```php
+<!-- If I had to guess, I would say that the $flag is defined in flag.php -->
+...
+<?php
+ini_set('display_errors', 'on');
+ini_set('error_reporting', E_ALL ^ E_DEPRECATED);
+
+if (isset($_REQUEST['q']) and is_string($_REQUEST['q'])):
+    require 'spell.php';  # implement the "correct($word)" function
+
+    $q = substr($_REQUEST['q'], 0, 256);  # Our spellchecker is a bit slow, do not DoS it please.
+    $blacklist = implode(["'", '"', '(', ')', ' ', '`']);
+
+    $corrected = preg_replace("/([^$blacklist]{2,})/ie", 'correct ("\\1")', $q);
+?>
+    <br>
+    <hr><br>
+    <div class="row">
+        <div class="panel panel-default">
+            <div class="panel-heading">Corrected text</div>
+            <div class="panel-body">
+                <blockquote>
+                    <?php echo htmlspecialchars($corrected); ?>
+                </blockquote>
+            </div>
+        </div>
+    </div>
+<?php endif ?>
+```
+
+Chú ý là có blacklist nên input của chúng ta khi đi vào hàm `correct("\\1")` sẽ không có các ký tự `'`, `"`, `(`, `)`, " ", "`":
+
+![image](images/level-05/image-2.png)
+
+Do input được đặt trong dấu nháy `"` nên chúng ta thử nhập vào một biến như `$blacklist` xem sao. Có thể thấy giá trị của biến được hiển thị:
+
+![image](images/level-05/image-3.png)
+
+Vậy nếu chúng ta nhập vào biến `$flag` để đọc flag có được không? Không được, do biến `$flag` không nằm trong file hiện tại mà ở file `flag.php`:
+
+![image](images/level-05/image-4.png)
+
+Do đó, chúng ta phải include file `flag.php` tới file hiện tại sau đó mới truy cập được vào biến `$flag`. Ở trong PHP có cú pháp sử dụng `${}` để truy cập tới biến và cũng có thể sử dụng `include` ở đó:
+
+![image](images/level-05/image-5.png)
+
+Vậy với payload `${include%09$_POST[0]}$flag&submit=&0=flag.php`, chúng ta có thể bypass khoảng trắng với Tab (`%09`), dấu `'` với `$_POST[0]` để lấy tên file từ tham số `0`:
+
+![image](images/level-05/image-6.png)
+
+### Flag
+
+`WEBSEC{Writing_a_sp3llcheckEr_in_php_aint_no_fun}`
